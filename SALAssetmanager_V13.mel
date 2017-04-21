@@ -1,0 +1,660 @@
+//------------------------------------------
+//SAL asset manager App [ ON DEV V3 ]
+//Some source Script from http://www.scriptswell.net/search/label/MEL (Read/Write TXT)
+//http://ewertb.soundlinker.com/mel/mel.101.php (Get Layout name)
+//
+//------------------------------------------
+
+//------------------------- Procedural ------------------------------------
+
+if (`window -exists mainWin`){ deleteUI -window mainWin; }
+if (`window -exists editLibraryWindow`){ deleteUI -window editLibraryWindow; }
+if (`window -exists editLibraryObjWin`){ deleteUI -window editLibraryObjWin; }
+if (`window -exists myCreateWindow`) { deleteUI -window myCreateWindow; }
+
+
+global proc string[] TextFileToStringArray (string $commnd, string $filePath) {
+    if($commnd == "r"){
+        int $fileId = `fopen $filePath "r"` ; // Open File
+        string $dataArray[] ; // Define String Array
+        string $nextLine = `fgetline $fileId` ; // Get The First Line
+        while (size($nextLine) > 0) { // Loop Until The String Size Is Zero (No Data On That Line)
+            string $cleanLine = strip($nextLine) ; // Strip Whitespace From The Beginning And End Of The Line
+            $dataArray[size($dataArray)] = $cleanLine ; // Add To Array
+            $nextLine = `fgetline $fileId` ; // Get Next Line And Continue
+            }
+        fclose $fileId ;
+        return $dataArray ; // Return Array
+     }else if($commnd == "w"){
+        string $myStr = "$session = 0;" ;// Create A String Array With Test Data
+        $fileId = `fopen $filePath "w"` ;// Open Your File
+        fprint $fileId ($myStr) ;
+        fclose $fileId ;
+        //return $filePath ;
+     }else{
+         Error("Wrong valiable") ;
+     }
+}
+
+proc config(string $thisDir){ // Check First time open
+    string $salDir = $thisDir+"SAL_assetmanager";
+    if(`filetest -d $salDir`){
+        print "Debug : SAL_assetmanager was exists.\n";
+        string $queryText[] = TextFileToStringArray ("r",$thisDir+"SAL_assetmanager/config.txt");
+        print ("Debug : "+$queryText[0]+"\n");
+        if($queryText[0] == "$session = 0;"){
+            print ("Debug : Success [$SESSION = 0]\n");
+        }else{
+            //
+            //
+            // Placeholder for future development.
+            //
+            
+            TextFileToStringArray ("w",$thisDir+"SAL_assetmanager/config.txt");
+            //print ("$dirResult[] : "+ $dirResult[0] +"\n");
+            print ("Debug: First session was create.\n");
+        }
+    }else{
+        
+        $response = `confirmDialog -title "Confirm" 
+			              -message "Do you want to create \"SAL_assermanager\" directory in this project?"
+			              -button "Yes" 
+			              -button "No"
+			              -defaultButton "Yes"
+			              -cancelButton "No"
+			              -dismissString "No"`;
+		
+		// check response	  
+		if( $response == "Yes" ) {
+			
+			// Create /SAL_assetmanager Directory
+            sysFile -makeDir $salDir; 
+            print ("Debug: create " + $salDir + "\n"); 
+            // Create config.txt
+            TextFileToStringArray ("w",$thisDir+"SAL_assetmanager/config.txt");
+            //Create obj Directory
+            string $salObjDir = $thisDir+"SAL_assetmanager/obj";
+            sysFile -makeDir $salObjDir; 
+            print ("Debug: create " + $salDir + "\n"); 
+            //Create thumbnail Directory
+            string $salThumbnailDir = $thisDir+"SAL_assetmanager/thumbnail/";
+            sysFile -makeDir $salThumbnailDir; 
+            print ("Debug: create " + $salThumbnailDir + "\n"); 
+                
+		} else if( $response == "No" ) {
+			error("Please set your directory or contact app's admin.");
+		}
+     }
+    
+    
+        
+} // end fuction
+
+proc captureView(string $filepath,string $filename){
+    int $format = `getAttr "defaultRenderGlobals.imageFormat"`; // keep the old format
+    setAttr    "defaultRenderGlobals.imageFormat" 32; // set to render to .png image
+    $filepath = $filepath+$filename+".png";
+    print ("Debug image filename: "+$filepath);
+    playblast    
+        -frame 1    
+        -format "image"        
+        -cf     $filepath // dir 
+        -v 0    
+        -wh 240 175    
+        -p 100; // playblast one frame to a specific file 
+    setAttr    "defaultRenderGlobals.imageFormat" $format ; // restore the old format
+}
+
+proc importObj(string $libName,string $fileName){
+    //string $filePath = $currentDirb+"/"+$fileName;
+    file -ns $libName -import $fileName;
+    print("Debug : "+$fileName+" was imported from "+ $fileName);
+    
+}
+
+proc createWin(string $filepath){
+    
+    string $selMesh[] = `ls -sl`;
+    if(size($selMesh) == 0){
+        error("Geometry was not selected");
+    }
+    string $tDir;
+    string $meshDir = $filepath + "/SAL_assetmanager/obj";
+    string $dirList[] = `getFileList -folder $meshDir `;
+    string $objType[];
+    //string $resault = "makeObj($resault);";
+    
+    if (`size $dirList` == 0){
+        makeObj("new");
+        $dirList = `getFileList -folder $meshDir `;
+        }
+    
+    if (`window -exists myCreateWindow`) { deleteUI -window myCreateWindow; }
+    string $createWindow = `window 
+                -title "save geometry"
+                -iconName "savegeo"
+                -widthHeight 200 55
+                myCreateWindow`;
+       
+            columnLayout -adjustableColumn true;
+                text -l "Select library";
+                
+                optionMenu  -label "Group" 
+                            //-changeCommand "$resault = \"#1\"" 
+                            groupName;
+                string $typeLabel;
+                    for($tDir in $dirList){
+                        $typeLabel = $tDir ;
+                        menuItem -label $typeLabel -parent "groupName";
+                    }
+                    //menuItem -label "new" -parent "groupName";
+                
+                //button -label "set" -command ("print $objType;");
+                
+            setParent ..;
+            columnLayout -adjustableColumn true;
+                button -l "OK" -c ("$objType = `optionMenu -q -v groupName`; makeObj($objType); if (`window -exists myCreateWindow`) { deleteUI -window myCreateWindow; }");
+                button -l "Cancle" -c "deleteUI -window myCreateWindow;";
+                separator;
+                button -label "New Libraly" -command ("makeObj(\"new\")");
+            setParent ..;
+            
+            showWindow $createWindow;
+            
+            
+}
+
+proc makeObj(string $objType ){ // Save selected ocject to OBJ file(s)
+    if (`window -exists myCreateWindow`) { deleteUI -window myCreateWindow; }
+    //deleteUI -window  createWindow;
+
+    string $selMesh[] = `ls -sl`;
+    string $filepath = `workspace -q -rd`+"assets/";
+    //string $objType = `optionMenu -q -v groupName`;
+    string $currentPane = `paneLayout -q -pane1 viewPanes`;
+    
+    //string $currentPane = `getPanel -wf`;
+        
+    if($objType == "new"){
+        
+        string $result = `promptDialog
+                                -title "new..."
+                                -message "new libraly"
+                                -button "OK"
+                                -button "Cancel"
+                                -defaultButton "OK"
+                                -cancelButton "Cancel"
+                                -dismissString "Cancel"`;
+                            if($result == "OK"){
+                                string $libName = `promptDialog -query`;
+                                //create in obj
+                                string $salPath = $filepath+"SAL_assetmanager/obj/" + $libName;
+                                sysFile -makeDir $salPath;
+                                print ("Debug: create " + $salPath + "\n"); 
+                                //create in thumbnail
+                                $salPath = $filepath+"SAL_assetmanager/thumbnail/" + $libName; 
+                                sysFile -makeDir $salPath; 
+                                print ("Debug: create " + $salPath + "\n"); 
+                            }
+        
+        
+        createWin($filepath);
+    }else{
+        
+        string $conResponse = `confirmDialog -title "Confirm" 
+			              -message "Select?"
+			              -button "One object"
+			              -button "Individual"
+			              -button "cancle"
+			              -defaultButton "One object"
+			              -cancelButton "No"
+			              -dismissString "No"`;
+			              
+        if( $conResponse == "Individual" ){
+            for ($obj in $selMesh){
+            string $objName;
+            string $result = `promptDialog
+                                -title "Name the object"
+                                -message $obj
+                                -text $obj
+                                -button "OK"
+                                -button "Cancel"
+                                -defaultButton "OK"
+                                -cancelButton "Cancel"
+                                -dismissString "Cancel"`;
+                if($result == "OK"){
+                    $objName = `promptDialog -query`;
+                    
+                    if($objName == "") // If name as blank will Error.
+                        error("Name not blank");
+                        
+                    string $outputDir = $filepath+"SAL_assetmanager/obj/"+$objType+"/"+$objName+".obj";
+                    string $fileExists = `file -exists -q $outputDir`;
+                    
+                    if($fileExists == 1){ // check exists OBJ file
+                            string $result = `promptDialog
+                                -title "Name the object"
+                                -message $obj
+                                -button "OK"
+                                -button "Cancel"
+                                -defaultButton "OK"
+                                -cancelButton "Cancel"
+                                -dismissString "Cancel"`;
+                                
+                            if($result == "OK"){
+                                    $objName = `promptDialog -query`;
+                            }
+                    }
+                    select -r $obj ;
+                    isolateSelect -state 1 $currentPane;
+                    isolateSelect -addSelected $currentPane;
+                    viewFit;
+                    select -cl  ;
+                    captureView( $filepath+"SAL_assetmanager/thumbnail/"+$objType+"/" , $objName );
+                    select -r $obj ;
+                    isolateSelect -state 0 $currentPane;
+                    print("Debug: Capture "+ $obj + "to " + $filepath+"SAL_assetmanager/thumbnail/"+$objType+"/"+$objName+".png\n");
+                    file -op "groups=1;ptgroups=1;materials=1;smoothing=1;normals=1" -typ "OBJexport" -es $outputDir;
+                    print("Debug: Save "+ $obj + "to " + $filepath+"SAL_assetmanager/obj/"+$objType+"/"+$objName+".obj\n");
+                }
+                if($result == "Skip"){ // When click "Skip" will stop and interrupt the loop
+                    break;
+                }
+                addAFrame ($objType,"show");
+            }
+            
+        }else{
+            string $objName;
+            string $obj = "" ;
+            for ($i in $selMesh){
+                $obj = $obj + " " + $i ;
+            }
+            string $result = `promptDialog
+                                -title "Name the object"
+                                -message "Name the group"
+                                -button "OK"
+                                -button "Cancel"
+                                -defaultButton "OK"
+                                -cancelButton "Cancel"
+                                -dismissString "Cancel"`;
+                if($result == "OK"){
+                    $objName = `promptDialog -query`;
+                    
+                    if($objName == "") // If name as blank will Error.
+                        error("Name not blank");
+                        
+                    string $outputDir = $filepath+"SAL_assetmanager/obj/"+$objType+"/"+$objName+".obj";
+                    string $fileExists = `file -exists -q $outputDir`;
+                    
+                    if($fileExists == 1){ // check exists OBJ file
+                            string $result = `promptDialog
+                                -title "Name the object"
+                                -message "Name the group"
+                                -button "OK"
+                                -button "Cancel"
+                                -defaultButton "OK"
+                                -cancelButton "Cancel"
+                                -dismissString "Cancel"`;
+                                
+                            if($result == "OK"){
+                                    $objName = `promptDialog -query`;
+                            }
+                    }
+                    string $tmp = "select -r " + $obj + ";\n" ;
+                    print $tmp;
+                    select -r $selMesh;
+                    //elect -r sphere1 cone1 pTorus1 ;
+                    isolateSelect -state 1 $currentPane;
+                    isolateSelect -addSelected $currentPane;
+                    viewFit;
+                    select -cl  ;
+                    captureView( $filepath+"SAL_assetmanager/thumbnail/"+$objType+"/" , $objName );
+                    select -r $selMesh ;
+                    isolateSelect -state 0 $currentPane;
+                    print("Debug: Capture "+ $obj + "to " + $filepath+"SAL_assetmanager/thumbnail/"+$objType+"/"+$objName+".png\n");
+                    file -op "groups=1;ptgroups=1;materials=1;smoothing=1;normals=1" -typ "OBJexport" -es $outputDir;
+                    print("Debug: Save "+ $obj + "to " + $filepath+"SAL_assetmanager/obj/"+$objType+"/"+$objName+".obj\n");
+        }
+        }
+        
+        //for($mesh in $meshes) {
+          //  select $mesh;
+            //$output = $filepath+"obj/" + $mesh + ".obj";
+            //file -op "" -typ "OBJexport" -es $output;
+            //print("export " + $output + "\n");
+        //}
+        }
+}
+
+global proc string findWindowLayout( string $windowUI )
+{
+  // Brute force: Get a list of all control layouts, and see which
+  // is a child of the specified window.
+  //
+  string $controls[] = `lsUI -l -controlLayouts`;
+
+  // Create a wildcard pattern used by the "gmatch" command.
+  //
+  string $pattern = $windowUI + "*";
+
+  // Default empty string to denote that no matching layout was found.
+  //
+  string $layout = "";
+
+  for ( $ui in $controls )
+  {
+    // Compare the wildcard pattern against the name of this control.
+    //
+    if ( `gmatch $ui $pattern` )
+    {
+      // Found it!
+      //
+      string $tokens[];
+      int $numTokens = `tokenize $ui "|" $tokens`;
+      if ( $numTokens > 1 )
+      {
+        // This returns a path to the control, specifying the window as the parent.
+        // It's advisable to always reference UI controls by their full path.
+        //
+        $layout = $tokens[0] + "|" + $tokens[1];
+
+        break;
+      }
+    }
+  }
+
+  return $layout;
+}
+
+global proc addAFrame(string $libName,string $procMethod) { // ====================
+    string $ca[];
+    string $columnLayout;
+    string $showLayOut = "showObjIn";
+    string $layout = findWindowLayout( "mainWin" );
+    if($procMethod == "edit"){
+        $showLayOut = "showObjEdit";
+        $layout = findWindowLayout( "editLibraryObjWin" );
+        $ca = `layout -q -childArray $layout`;
+        $columnLayout = $layout + "|" + $ca[1] ;
+    }else{
+        $showLayOut = "showObjIn";
+        $layout = findWindowLayout( "mainWin" );
+        $ca = `layout -q -childArray $layout`;
+        $columnLayout = $layout + "|" + $ca[0] ;
+    }
+        
+    
+    
+    string $myLayout = $columnLayout + "|" + $showLayOut ;
+    print ("**Debug : " + $myLayout + "\n");
+    if (`layout -q -exists $myLayout`){ deleteUI -lay $myLayout; }
+    setParent $columnLayout;
+    //string $timeNow = `about -currentTime`;
+    
+    string $meshDirt = `workspace -q -rd`+"assets/"+"SAL_assetmanager/obj"+"/"+ $libName+"/";
+    string $imageDirt = `workspace -q -rd`+"assets/"+"SAL_assetmanager/thumbnail/"+ $libName;
+    
+    ///
+    //print ("$imageDirt : "+$imageDirt+"\n");
+    
+    string $objects;
+    string $fileImageName;
+    string $mtlName;
+    
+    string $meshList[] = `getFileList -folder $meshDirt -fs "*.obj"`;
+    string $subLayout = `rowColumnLayout -numberOfColumns 2 showObjIn`;
+    string $objectFileName;
+    //print ("Debug : "+ $subLayout+" was create.\n");
+    string $frameLayout;
+    
+        for($objects in $meshList){
+            $objectFileName = $meshDirt+$objects;
+            $frameLayout = `columnLayout -adjustableColumn true`;    
+            $fileImageName = $imageDirt+"/"+(substituteAllString($objects , ".obj" , ".png"));
+            $mtlName = $meshDirt+(substituteAllString($objects , ".obj" , ".mtl"));
+            //print ("$fileImageName : "+$fileImageName+"\n");
+    //---------------
+            
+                image -i $fileImageName;
+                text -l $objects;
+                if ($procMethod == "show")
+                button -l "Import" -c ("importObj(\""+ $libName +"\",\""+$objectFileName+"\")") ;
+                if($procMethod == "edit")
+                    button -l "Delete" -c ("deleteObjectLibrary(\""+ $libName +"\",\""+$objectFileName+"\",\""+ $fileImageName +"\",\""+ $mtlName +"\")");
+                print ("Show object : "+$objects+"\n");
+            separator;
+            setParent..; 
+            
+            }
+    //---------------
+    setParent..; 
+}
+
+
+proc projectSetting(){
+    string $proDir[] = `fileDialog2 -cap "Set project" -dialogStyle 2 -fileMode 3`;
+    setProject $proDir[0];
+    deleteUI -window helpWin;
+}
+
+proc help(){
+    string $helpWindow = `window 
+                -title "Help"
+                -iconName "Help"
+                -widthHeight 400 200
+                helpWin`;
+       
+            columnLayout -adjustableColumn true;
+                text -l "\nset project that contained SAL Assetmanager first.\n if you ave a problem please contact admin. \n \n Sirasit Sawetprom\n ";
+                button -label "Set project Directory" -command "projectSetting()";
+                button -label "Close" -command ("deleteUI -window " + $helpWindow);
+            setParent ..;
+            
+            showWindow $helpWindow;
+}
+
+proc editLibrary( string $libLocation ) {
+    print $libLocation;
+    if (`window -exists  editLibraryWindow` == 1){ deleteUI -window  editLibraryWindow; }
+    string $libDir;
+    string $libSize;
+    string $libNameTF;
+    string $libList[];
+    
+    $libList = `getFileList -folder $libLocation `;
+    
+    window
+        - title "Edit Labrary"
+        -iconName "Help"
+        -widthHeight 200 55
+        editLibraryWindow;
+    
+    scrollLayout -horizontalScrollBarThickness 0 -width 500;
+        rowColumnLayout -numberOfColumns 4
+            -columnWidth 1 100
+            -columnWidth 2 80
+            -columnWidth 3 50
+            -columnWidth 4 120;
+            
+            text -l "Library";
+            text -l "Obj count";
+            text -l "Edit";
+            text -l "Delete";
+            
+             for ($libDir in $libList ){
+                 $libSize = size (`getFileList -folder ($libLocation+"/"+$libDir) -fs "*.obj"`);
+                 
+                 //$libNameTF = `textField -tx $libDir -editable true`;
+                 text -l $libDir;
+                 text -l ("Object : "+$libSize);
+                 button -l "Edit" -command (" editLibraryObj(\""+$libDir+"\");");
+                 if ($libSize == 0)
+                     button -l "delete" -c ("deleteLibrary(\""+$libLocation+"\",\""+$libDir+"\");");
+                 else
+                     text -l "delete object first";
+                 
+             }
+         setParent..;
+    setParent..;    
+    
+    showWindow("editLibraryWindow");
+}
+
+proc editLibraryObj(string $libName){
+    if (`window -exists editLibraryObjWin` == 1){ deleteUI -window editLibraryObjWin; }
+    
+        window
+        -title "Object edit"
+        editLibraryObjWin;
+        
+        scrollLayout -horizontalScrollBarThickness 0 -width 500 scallLayoutEditObj;
+        
+            text -l (">>"+$libName);
+            string $mainLayout = `columnLayout
+                -adjustableColumn true
+                showObjEdit`;
+                
+            addAFrame($libName,"edit");
+            
+            setParent..;
+        setParent..;
+    
+    showWindow("editLibraryObjWin");
+}
+
+proc deleteLibrary(string $libLocation, string $libName){
+    if(`sysFile -removeEmptyDir ($libLocation +"/"+ $libName) `){ 
+        print ("Debug : Delete this library \n>>"+ $libLocation + $libName +"\n"); 
+        editLibrary($libLocation);
+    }else{
+        print ("ERROR\n"+ $libLocation + $libName );
+    }
+}
+
+proc deleteObjectLibrary(string $libName,string $objectFileName, string $imageFileName, string $mtlFileName){
+    string $meshDirt = `workspace -q -rd`+"assets/"+"SAL_assetmanager/obj"+"/"+ $libName+"/";
+    sysFile -delete $objectFileName; 
+    print ("Delete : "+ $objectFileName +"\n"); 
+    sysFile -delete $imageFileName;
+    print ("Delete : "+ $imageFileName +"\n"); 
+    sysFile -delete $mtlFileName;
+    print ("Delete : "+ $mtlFileName +"\n"); 
+    string $meshList[] = `getFileList -folder $meshDirt -fs "*.obj"`; 
+    if (`size($meshList)`>0) 
+        editLibraryObj($libName); 
+    else
+        if (`window -exists editLibraryObjWin` == 1){ deleteUI -window editLibraryObjWin; }
+        editLibrary(`workspace -q -rd`+"assets/"+"SAL_assetmanager/obj");
+}
+
+
+proc mainWinAsst(){
+
+    if (`window -exists mainWin` == 1){ deleteUI -window mainWin; }
+    string $currentDir = `workspace -q -rd`+"assets/";
+    string $imageDir   = $currentDir+"SAL_assetmanager/thumbnail/";
+    string $meshDir = $currentDir+"SAL_assetmanager/obj";
+    string $version = "V3.2 Beta";
+    
+    
+    string $dirList[] = `getFileList -folder $meshDir `;
+    string $tDir;
+    
+       
+        print ("Debug workspace : "+$currentDir);    
+        print("Debug Image DIR: "+$imageDir+"\n");
+        print("Debug $meshDir : "+$meshDir+"\n");
+        
+    config($currentDir); // ***
+    
+            //string $tmpa = "P:/Work/Maya_Asset manager Project/asset manager01/assets/SAL_assetmanager/obj";
+    
+    //------------------------------Content -----------------------------------
+            
+    window
+        -title ("Asset Manager "+$version+" - :: Shape and Light Studio ::")
+        -menuBar true
+        -resizeToFitChildren 1
+        mainWin;
+        
+    //---------------------------Main Menu ------------------------------
+    menu 
+        -label "File" 
+        -tearOff true;
+        
+        menuItem -label "Set project directory" -command ("projectSetting();");
+        menuItem -label "Save selected Geometry" -command ("createWin($currentDir);");
+        menuItem -divider true ;
+        menuItem -label "Quit" -command "deleteUI -window mainWin;";
+        setParent -menu ..;
+        
+    menu 
+        -label "Edit" 
+        -tearOff true;    
+        
+        menuItem -label "Edit library" -subMenu true;
+        menuItem -label "Library" -command ("editLibrary(\""+$meshDir+"\")");
+        menuItem -label "Object" -command (" ");
+        setParent -menu ..;
+        
+    menu 
+        -label "Help" 
+        -helpMenu true;
+        
+        menuItem -label "About Application..." -command "help();";
+        setParent -menu ..;
+        
+        
+    paneLayout //--------------------- MAin Layout ---------------------------
+        -configuration "right3"
+        -st 8
+        -ps 1 80 60
+        -ps 2 10 30
+        -ps 3 10 10
+        ;
+        
+        
+            string $mainLayout = `scrollLayout -horizontalScrollBarThickness 0 ScrollLaySectionA`;
+            
+            //string $tmps = ">>" + $imageDirt;
+            //text -l $tmps;
+                
+            
+            
+            //==== Placeholder ======
+                
+                  
+        
+        setParent..; // ---------------- End of Section 1 -----------------
+        
+        
+         // -----------------Section2--------------------
+         columnLayout
+             -adjustableColumn true;
+         text -l "Library";
+         separator;
+         
+         for ($tDir in $dirList ){
+             button -l $tDir -c ("addAFrame(\"" + $tDir + "\",\"show\")");
+         }
+         
+         setParent..;
+        // -----------------Emd Of Section2--------------------
+        columnLayout // -----------------Section 3-------------------
+            -adjustableColumn true;
+            button -l "Save Geometry to library" -c ("createWin(\""+$currentDir+"\");");
+            separator;
+            button -l "refresh" -c ("mainWinAsst();");
+            button -l "Ok" -c "deleteUI -window mainWin;";
+            button -l "Cancel" -c "deleteUI -window mainWin;";
+            text -l $version;
+        setParent..;// ---------------- End of Section 3 -----------------
+        
+    setParent..;   //------------------ End Main Layout ---------------------
+    
+    showWindow mainWin; 
+}
+
+mainWinAsst();
+
+//------------------------------------------------------old -------------------------;
